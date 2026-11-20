@@ -1,0 +1,52 @@
+name: trail
+on:
+  push:
+    branches: [main]
+    paths: ["plugins/trail/**", ".github/workflows/trail*.yml"]
+  pull_request:
+    paths: ["plugins/trail/**", ".github/workflows/trail*.yml"]
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: plugins/trail
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/trail
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: plugins/trail
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.89"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/trail
+      - run: cargo build --locked
+      - run: cargo test --locked

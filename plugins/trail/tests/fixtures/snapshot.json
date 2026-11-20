@@ -1,0 +1,92 @@
+{
+  "sessions": [
+    {
+      "session_id": "session:01a1ec0f-9ab7-7192-84a5-b63f3d308e7e",
+      "label": "Onboarding",
+      "active_window_id": "window:01a1ec0f-9ab7-7668-aa6c-09aaac6ad6e7",
+      "windows": [
+        {
+          "window_id": "window:01a1ec0f-9ab7-7668-aa6c-09aaac6ad6e7",
+          "label": "Window ac6ad6e7",
+          "focused_block_id": "block:01a1ec11-e4df-79b8-a51a-1b464916733f",
+          "blocks": [
+            {
+              "block_id": "block:01a1ec11-e4df-79b8-a51a-1b464916733f",
+              "label": "shell",
+              "process": {
+                "child": {
+                  "name": "login",
+                  "path": "/usr/bin/login",
+                  "pid": 92216,
+                  "user": "root",
+                  "user_id": 0
+                },
+                "foreground": {
+                  "argv0": "omp",
+                  "cwd": "/Users/u/projects/rex-extras",
+                  "invoked_path": "/opt/homebrew/bin/omp",
+                  "name": "omp",
+                  "path": "/opt/homebrew/Cellar/omp/18.22.1/bin/omp",
+                  "pid": 1445,
+                  "user": "u",
+                  "user_id": 501
+                },
+                "home": "/Users/u"
+              },
+              "status": {
+                "records": [
+                  {
+                    "app": "omp",
+                    "effective_app": "omp",
+                    "owner": {
+                      "name": "omp",
+                      "pid": 1445
+                    },
+                    "state": "working",
+                    "updated_at": "2026-11-17T20:30:31.942695-05:00"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "session_id": "session:01a1ec0f-0000-7000-8000-000000000002",
+      "label": "Scratch",
+      "active_window_id": "window:01a1ec0f-0000-7000-8000-000000000003",
+      "windows": [
+        {
+          "window_id": "window:01a1ec0f-0000-7000-8000-000000000003",
+          "label": "Window 00000003",
+          "focused_block_id": "block:01a1ec0f-0000-7000-8000-000000000004",
+          "blocks": [
+            {
+              "block_id": "block:01a1ec0f-0000-7000-8000-000000000004",
+              "label": "shell",
+              "process": {
+                "child": {
+                  "pid": 4242,
+                  "name": "zsh"
+                },
+                "foreground": {
+                  "pid": 4242,
+                  "name": "zsh",
+                  "path": "/bin/zsh",
+                  "argv0": "-zsh",
+                  "cwd": "/Users/u"
+                },
+                "last_exit": null
+              },
+              "status": {
+                "records": {}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "focused_session_id": "session:01a1ec0f-9ab7-7192-84a5-b63f3d308e7e"
+}
