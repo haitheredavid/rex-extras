@@ -5,6 +5,7 @@ Personal [Rex](https://www.superlogical.com/rex) extras, one subdirectory per ex
 | Extra | What it does |
 | --- | --- |
 | [`trail`](plugins/trail/README.md) | Agent activity for Rex: a lane per agent block with state, context and cost, and a step-through session timeline |
+| [`panoptes`](plugins/panoptes/README.md) | Opens the panoptes GitHub reviewer console for the focused pane's repository, as an overlay or a tab |
 
 ## Install
 
@@ -21,3 +22,7 @@ Each `plugins/<name>/` is self-contained. A Rust extra is its own crate with `Ca
 ## trail
 
 See [plugins/trail/README.md](plugins/trail/README.md) for views, keys, configuration, data handling and development.
+
+## panoptes
+
+See [plugins/panoptes/README.md](plugins/panoptes/README.md) for install, actions and keys.

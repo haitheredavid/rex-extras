@@ -25,6 +25,7 @@ Each `plugins/<name>/` is self-contained. A Rust extra is its own crate with `Ca
 |------|---------|---------|
 | `plugins/trail/` | `rex-trail` | Agent activity TUI: a lane per agent block with state, context and cost, plus a session timeline. |
 | `plugins/trail/lua/trail.lua` | Lua module | Registers the `trail_open` / `trail_popup` actions and starts the recorder. |
+| `plugins/panoptes/lua/panoptes.lua` | Lua module | Registers the `panoptes_open` / `panoptes_open_tab` actions; Lua only, no binary. |
 | `.github/workflows/trail*.yml` | CI | Per-extra checks and tag-driven releases. |
 
 ## Rex Extension Model

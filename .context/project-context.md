@@ -29,6 +29,8 @@ How Rex is extended, with the exact methods and payloads relied on: [`reference/
 | `plugins/trail/` | `rex-trail` | Agent activity TUI and recorder. |
 | `plugins/trail/lua/trail.lua` | Lua module | Actions `trail_open` (band) and `trail_popup`, optional keybinds, recorder start. |
 | `plugins/trail/scripts/install.sh` | installer | Downloads (or builds) the binary and copies the Lua module. |
+| `plugins/panoptes/lua/panoptes.lua` | Lua module | Actions `panoptes_open` (overlay) and `panoptes_open_tab`, optional keybinds. No binary. |
+| `plugins/panoptes/scripts/install.sh` | installer | Copies the Lua module. |
 | `.github/workflows/` | CI | `trail.yml` checks, `trail-release.yml` tag-driven release. |
 
 ## External Integrations
