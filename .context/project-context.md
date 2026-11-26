@@ -20,7 +20,7 @@ external binary (long-running) -> rex events --all --json -> snapshot via rex do
 - The Lua module only registers actions and keybinds and spawns the binary; all logic lives in the binary.
 - Host access is one module per extra (`src/rex.rs` in trail) that shells out to the `rex` CLI. It is the only code that knows Rex's wire format.
 
-How Rex is extended, with the exact methods and payloads relied on: [`reference/rex-extension-model.md`](reference/rex-extension-model.md).
+How Rex is extended, with the exact methods and payloads relied on: [`reference/rex-extension-model.md`](reference/rex-extension-model.md). How an extra should use those surfaces: [`guides/building-with-rex.md`](guides/building-with-rex.md).
 
 ## Ownership Map
 
