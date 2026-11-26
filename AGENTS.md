@@ -8,6 +8,7 @@ Additional durable context lives in `.context/` (conventions in `.context/README
 
 - `.context/project-context.md` - product purpose, architecture, ownership, and durable decisions.
 - `.context/reference/rex-extension-model.md` - how Rex is extended: Lua module, CLI, API methods, events, environment.
+- `.context/guides/building-with-rex.md` - how to build an extra on Rex: Lua actions, event consumers, blocks, design system (surfaces, icons, status, words, color); templates and anti-patterns.
 - `.context/guides/engineering.md` - commands, Rust style, testing patterns, boundaries, and safety rules.
 - `.context/guides/writing-briefs.md` - the brief -> design -> spec flow and how to write a brief.
 - `.context/guides/writing-designs.md` - how to write a design that splits a brief into specs.

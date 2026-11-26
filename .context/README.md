@@ -17,6 +17,7 @@ Prescriptive standards and workflows - "how to work here". Change when a convent
 - `guides/doc-lifecycle.md` - where briefs, designs, specs, and other in-flight docs are drafted, reviewed, and closed.
 - `guides/pull-requests.md` - PR branch, title, body, size, linear vs. stacked.
 - `guides/context-maintenance.md` - altitude rule, protected paths, context PR procedure.
+- `guides/building-with-rex.md` - how an extra splits into Lua actions, event consumer, and program in a block; the Rex design system it uses; conventions for each.
 
 Any other file in `guides/` comes from the team profile; its first heading says what it covers.
 

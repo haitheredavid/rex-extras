@@ -1,11 +1,12 @@
 # Rex extension model
 
-Verified on rex 0.1.0-preview.20, API revision 16.
+Verified on rex 0.1.0-preview.23, API revision 19. How to use these surfaces: [`../guides/building-with-rex.md`](../guides/building-with-rex.md).
 
 **No plugin manager, no manifest.** An extra is a Lua module that init.lua `require`s, plus external programs that drive the `rex` CLI.
-- The Lua runtime is 5.1. `require` and `dofile` exist. `package.path` is `./?.lua;/usr/local/share/lua/5.1/?.lua;…`.
-- `rex.action`, `rex.bind` and `rex.exec`/`rex.exec.start` work at config load.
-- `rex.on` does not work in config, only in `rex do` scripts. Event-driven work therefore lives in a long-running process.
+- The Lua runtime is 5.1. `require` and `dofile` exist. `require` loads files beside init.lua; an extra installed elsewhere prepends its directory to `package.path` in the init.lua snippet. `io.popen` and `os.execute` raise errors.
+- `rex.action`, `rex.bind` and `rex.exec`/`rex.exec.start` work at config load. `rex.call`, `rex.session.*` and `rex.block.call` fail at load and work inside actions.
+- `rex.on` does not work in config, only in `rex do` scripts. Event-driven work therefore lives in a long-running process. Lua handlers get unwrapped payloads; only CLI JSON is nested.
+- Per-function availability: https://www.superlogical.com/rex/docs/reference/lua#where-each-function-works
 
 **`rex api call METHOD '<json>'`** prints the result JSON on stdout.
 
@@ -44,5 +45,5 @@ Verified on rex 0.1.0-preview.20, API revision 16.
 - Claude Code writes `<CLAUDE_CONFIG_DIR|~/.claude>/sessions/<n>.json` containing `{"pid", "sessionId", "status":"busy"|…}`. The file name is **not** always the pid; match on the `pid` field.
 
 **Environment:**
-- Panes get `REX_SESSION`, `REX_BLOCK`, `REX_SERVER` and `REX_BIN_DIR` (the directory holding `rex`).
+- Panes get `REX_BLOCK`, `REX_SERVER` and `REX_BIN_DIR` (the directory holding `rex`). `REX_SESSION` is not set; any `-s` accepts a block ID, so `-s "$REX_BLOCK"` targets the pane's session.
 - `REX_BIN_DIR` is also set for `rex do` scripts.
