@@ -1,7 +1,6 @@
 mod config;
 mod history;
 mod model;
-mod open;
 mod prefs;
 mod record;
 mod rex;
@@ -31,7 +30,7 @@ use view::{App, Orient, fmt_dur, preset_from_name};
 
 const NOTICE_MS: i64 = 5_000;
 const REDRAW_EVERY: Duration = Duration::from_secs(1);
-const USAGE: &str = "usage: rex-trail [--popup] [--view time|sequence|area|heat|dash] [--orient h|v] | --dump [--width N --height N --keys \"j j Tab\" ...] | --version | open split|popup --session S --block B | record";
+const USAGE: &str = "usage: rex-trail [--popup] [--view time|sequence|area|heat|dash] [--orient h|v] | --dump [--width N --height N --keys \"j j Tab\" ...] | --version | config --json | record";
 
 fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -135,17 +134,13 @@ fn main() -> anyhow::Result<()> {
             println!("{}", version_line());
             Ok(())
         }
-        Some(cmd @ ("open" | "record")) => {
-            let result = if cmd == "open" {
-                open::run(&args[1..]).unwrap_or_else(|| {
-                    eprintln!("{}", open::USAGE);
-                    std::process::exit(2)
-                })
-            } else {
-                record::run()
-            };
-            if let Err(e) = result {
-                eprintln!("rex-trail {cmd}: {e:#}");
+        Some("config") if args[1..] == ["--json"] => {
+            println!("{}", config().placement_json());
+            Ok(())
+        }
+        Some("record") => {
+            if let Err(e) = record::run() {
+                eprintln!("rex-trail record: {e:#}");
                 std::process::exit(1);
             }
             Ok(())
@@ -259,23 +254,12 @@ fn focus(app: &App, block_id: &str) -> anyhow::Result<()> {
     rex::call("session.focus_block", json!({ "session_id": lane.workspace_id, "block_id": block_id })).map(drop)
 }
 
-/// Moves the band into `window` when it becomes the active window of the band's own session, the
-/// one holding its block; a band not in the snapshot doesn't follow.
-fn follow(app: &App, host: &Host, session_id: &str, window_id: &str) -> anyhow::Result<()> {
-    let Some(band) = self_pane() else { return Ok(()) };
-    if app.popup || !config().band_follow || host.raw.session_of(&band) != Some(session_id) {
-        return Ok(());
-    }
-    match open::follow_anchor(&host.raw, session_id, &band, window_id) {
-        Some(anchor) => open::follow(session_id, &band, &anchor),
-        None => Ok(()),
-    }
-}
-
 fn run_tui(o: &Opts) -> anyhow::Result<()> {
     let (mut app, mut host, connected) = start(o);
     let (tx, rx) = mpsc::channel::<Msg>();
-    let mut sub = Some(Subscriber::start(tx.clone()));
+    // A band moves itself into the active window of its session; the events script does that.
+    let band = if o.popup || !config().band_follow { None } else { self_pane() };
+    let mut sub = Some(Subscriber::start(tx.clone(), band.as_deref()));
     let mut resubscribe_at: Option<Instant> = None;
     let mut backoff = RESUBSCRIBE_FIRST;
     let mut resnap_at: Option<Instant> = None;
@@ -347,12 +331,8 @@ fn run_tui(o: &Opts) -> anyhow::Result<()> {
                         backoff = RESUBSCRIBE_FIRST;
                         resnap_at.get_or_insert_with(|| Instant::now() + DEBOUNCE);
                     }
-                    Msg::ActiveWindow { session_id, window_id } => {
-                        // Follow from a snapshot that has the new window in it.
-                        refresh(&mut app, &mut host);
-                        if let Err(e) = follow(&app, &host, &session_id, &window_id) {
-                            app.error = Some(format!("follow: {e:#}"));
-                        }
+                    Msg::Error(text) => {
+                        app.notice = Some((text, now_ms() + NOTICE_MS));
                         dirty = true;
                     }
                     Msg::Lost(reason) => {
@@ -368,7 +348,7 @@ fn run_tui(o: &Opts) -> anyhow::Result<()> {
             let now = Instant::now();
             if resubscribe_at.is_some_and(|t| now >= t) {
                 resubscribe_at = None;
-                sub = Some(Subscriber::start(tx.clone()));
+                sub = Some(Subscriber::start(tx.clone(), band.as_deref()));
             }
             if app.refresh_requested || now >= next_snapshot || resnap_at.is_some_and(|t| now >= t) {
                 app.refresh_requested = false;

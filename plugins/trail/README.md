@@ -27,17 +27,26 @@ Add to init.lua, then `rex config reload`:
 
 ```lua
 package.path = os.getenv("HOME") .. "/.local/share/rex-extras/lua/?.lua;" .. package.path
-require("rex_extras.trail").setup{ keys = { ["ctrl+a>alt+g"] = "trail_open", ["ctrl+a>alt+shift+g"] = "trail_popup" } }
+require("rex_extras.trail").setup{ keys = {
+  ["ctrl+a>alt+g"] = "trail_toggle",
+  ["ctrl+a>alt+shift+g"] = "trail_popup",
+  ["ctrl+a>alt+b"] = "trail_next_blocked",
+} }
 ```
 
-`setup` registers two actions, both in the `Trail` category of the command palette:
+`setup` registers these actions in the `Trail` category of the command palette. Each can be bound from any block, or run with `rex do <name>`:
 
-- `trail_open` (Agent trail (band)): a band split below the focused block, `band.rows` tall
-- `trail_popup` (Agent trail (popup)): a centered floating layer, `popup.width` × `popup.height`
+- `trail_open` (Trail: Open Band): a band split below the focused block, `band.rows` tall (or beside it, `band.columns` wide, with `band.split = "right"`); focuses the band instead if the session already has one
+- `trail_popup` (Trail: Open Popup): a centered floating layer, `popup.width` × `popup.height`; focuses the popup instead if one is open
+- `trail_toggle` (Trail: Toggle Band): closes the session's band, or opens it like `trail_open`
+- `trail_focus` (Trail: Focus): focuses the session's band or popup, or opens the band
+- `trail_next_blocked` (Trail: Next Blocked Agent): focuses the next agent reporting `blocked`, in any session, after the focused block, wrapping around; switches the app to that session when it is another one
 
-Options: `keys` (key → action name, passed to `rex.bind`), `bin` (the `rex-trail` path, if not the default) and `record = false` to skip starting the recorder. The explicit `package.path` line keeps the module loading even when init.lua is a symlink elsewhere.
+The Lua module places the band and popup itself, sized from `rex-trail config --json`, which prints the resolved `[band]` and `[popup]` settings. It finds an open band or popup by its block label, `Trail` or `Trail popup`.
 
-The band follows you: when another window of its session becomes active, the band moves beside that window's focused block, keeping its view and scroll. It stays put if moving would leave its window empty. It doesn't follow into other sessions, since Rex only moves blocks within a session.
+Options: `keys` (key → action name, passed to `rex.bind`), `bin` (the `rex-trail` path, if not `$REX_EXTRAS_HOME/trail/bin/rex-trail`, else `~/.local/share/rex-extras/trail/bin/rex-trail`) and `record = false` to skip starting the recorder. The explicit `package.path` line keeps the module loading even when init.lua is a symlink elsewhere.
+
+The band follows you: when another window of its session becomes active, the band moves beside that window's focused block, keeping its view and scroll. It stays put if moving would leave its window empty. The move is made by the band's event script (a `rex do` script with `rex.on` handlers that the band runs), so `band.follow = false` turns it off. It doesn't follow into other sessions, since Rex only moves blocks within a session.
 
 ### The recorder
 
@@ -388,7 +397,7 @@ closed = "gray"
 - The header shows `⚠ rex: <error> — retrying` when trail can't reach Rex through the `rex` CLI. trail looks for `rex` in `$REX_BIN_DIR`, then in the macOS app bundle, then on `PATH`.
 - A lane is status-only (ctx `–`, and the timeline says `no session file: status only`) when its session can't be resolved. For omp and Codex, check `lsof -a -p <agent pid> -Fn | grep jsonl`, which should list the session file. For Claude Code, check that a `~/.claude/sessions/*.json` file names the agent's pid.
 - Blocked reminders (`notify.blocked_after`) are sent as OSC 777 desktop notifications. Turn on Rex's **Terminal Notifications** setting to see them.
-- An action that fails logs `trail: <error>` to Rex's log.
+- An action that fails reports `trail: <error>` to whoever ran it (the palette, or `rex do`, which exits non-zero).
 - To force a source build (no download): `REX_TRAIL_BUILD=source sh scripts/install.sh`.
 
 ## Uninstall
@@ -408,7 +417,7 @@ cd plugins/trail
 cargo test
 cargo build --release
 ./target/release/rex-trail --dump --width 120 --height 20 [--view sequence|area|heat|dash] [--orient v] [--keys "j Tab"]
-./target/release/rex-trail open split --session "$(rex do -e 'return rex.session_id')" --block "$REX_BLOCK"
+./target/release/rex-trail config --json
 ```
 
-`--dump` renders one frame against the running Rex server to stdout, after pressing `--keys`; run it with `REX_BLOCK` unset to include the block you run it from. To try the actions without touching init.lua, write a script that sets `package.path` to `plugins/trail/lua/?.lua` and calls `require("trail").setup{ bin = "<repo>/plugins/trail/target/release/rex-trail", record = false }`, then run `rex config check <script>` and `rex do <script> --action trail_open`.
+`--dump` renders one frame against the running Rex server to stdout, after pressing `--keys`; run it with `REX_BLOCK` unset to include the block you run it from. `config --json` prints the resolved `[band]` and `[popup]` settings the Lua module places panes with. To try the actions without touching init.lua, write a wrapper script that sets `package.path` to `plugins/trail/lua/?.lua` and calls `require("trail").setup{ bin = "<repo>/plugins/trail/target/release/rex-trail", record = false }`, then run `rex config check <wrapper>` and `rex do <wrapper> --action trail_open` (or any other action).

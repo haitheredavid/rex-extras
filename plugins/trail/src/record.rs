@@ -60,7 +60,7 @@ pub fn run() -> anyhow::Result<()> {
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut host = Host::default();
     let mut agents: Option<BTreeMap<String, PaneMeta>> = None;
-    let mut _sub = Some(Subscriber::start(tx.clone()));
+    let mut _sub = Some(Subscriber::start(tx.clone(), None));
     let mut resubscribe_at: Option<Instant> = None;
     let mut backoff = RESUBSCRIBE_FIRST;
     let mut snapshot_at = Instant::now();
@@ -85,7 +85,7 @@ pub fn run() -> anyhow::Result<()> {
         let now = Instant::now();
         if resubscribe_at.is_some_and(|t| now >= t) {
             resubscribe_at = None;
-            _sub = Some(Subscriber::start(tx.clone()));
+            _sub = Some(Subscriber::start(tx.clone(), None));
         }
         if now < snapshot_at {
             continue;

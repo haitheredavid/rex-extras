@@ -1,5 +1,6 @@
 //! Rex host access through the `rex` CLI: one-shot `api call`s, a snapshot of every session via
-//! `rex do`, and the `rex events` stream, mapped onto the host-neutral wire types the model folds.
+//! `rex do`, and the `rex/events.lua` event script, mapped onto the host-neutral wire types the
+//! model folds.
 
 mod resolve;
 
@@ -16,6 +17,7 @@ use serde::de::Error as _;
 use serde::{Deserialize, Deserializer};
 use serde_json::Value;
 
+use crate::config::config;
 use crate::model::{AgentStatus, PaneMeta};
 use crate::session::{RefKind, SessionRef};
 
@@ -202,16 +204,6 @@ pub struct Raw {
     pub focused_session_id: Option<String>,
 }
 
-impl Raw {
-    /// The session holding `block`, e.g. the one a pane's `REX_BLOCK` runs in.
-    pub fn session_of(&self, block: &str) -> Option<&str> {
-        self.sessions
-            .iter()
-            .find(|s| s.windows.iter().any(|w| w.blocks.iter().any(|b| b.block_id == block)))
-            .map(|s| s.session_id.as_str())
-    }
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct RawSession {
     pub session_id: String,
@@ -228,8 +220,6 @@ pub struct RawWindow {
     pub window_id: String,
     #[serde(default)]
     pub label: Option<String>,
-    #[serde(default)]
-    pub focused_block_id: Option<String>,
     #[serde(default, deserialize_with = "seq")]
     pub blocks: Vec<RawBlock>,
 }
@@ -371,11 +361,10 @@ struct Cached {
     at: Instant,
 }
 
-/// Snapshots with session resolution cached per block and pid; `raw` is the latest raw snapshot.
+/// Snapshots with session resolution cached per block and pid.
 #[derive(Default)]
 pub struct Host {
     cache: HashMap<(String, u32), Cached>,
-    pub raw: Raw,
 }
 
 impl Host {
@@ -403,7 +392,6 @@ impl Host {
             found
         });
         self.cache.retain(|k, _| seen.contains(k));
-        self.raw = raw;
         Ok(snap)
     }
 }
@@ -412,84 +400,72 @@ impl Host {
 pub enum Msg {
     /// Something a snapshot shows may have changed.
     Changed,
-    ActiveWindow {
-        session_id: String,
-        window_id: String,
-    },
+    /// The events script reported a failure it survived, e.g. moving the band.
+    Error(String),
     /// The event stream ended or never started.
     Lost(String),
 }
 
-/// Server events that change what a snapshot shows.
-const SERVER_CHANGES: [&str; 2] = ["session_created", "session_destroyed"];
-/// Session and terminal events that do. Others, like `title_changed` (omp's spinner, several a
-/// second) and `client_connected` (every `rex` call, ours included), would only cost snapshots.
-const SESSION_CHANGES: [&str; 13] = [
-    "window_created",
-    "window_closed",
-    "window_label_changed",
-    "block_created",
-    "block_closed",
-    "session_label_changed",
-    "session_view_changed",
-    "program_status_changed",
-    "program_status_removed",
-    "process_changed",
-    "child_exited",
-    "pwd_changed",
-    "active_window_changed",
-];
-
-/// One `rex events --json` line as a message; None for events trail ignores.
+/// One `rex/events.lua` line as a message; None for other lines, like `rex do`'s `listening: …`.
 fn parse_line(line: &str) -> Option<Msg> {
     let v: Value = serde_json::from_str(line).ok()?;
-    let kind = v["type"].as_str()?;
-    if kind != "session_event" {
-        return SERVER_CHANGES.contains(&kind).then_some(Msg::Changed);
+    match v["msg"].as_str()? {
+        "changed" | "active_window" => Some(Msg::Changed),
+        "error" => Some(Msg::Error(v["text"].as_str().unwrap_or("events script failed").to_string())),
+        _ => None,
     }
-    let event = &v["payload"]["event"];
-    let name = match event["type"].as_str()? {
-        "block_event" => event["payload"]["name"].as_str()?,
-        other => other,
-    };
-    if name == "active_window_changed" {
-        return Some(Msg::ActiveWindow {
-            session_id: v["payload"]["session_id"].as_str()?.to_string(),
-            window_id: event["payload"]["window_id"].as_str()?.to_string(),
-        });
-    }
-    SESSION_CHANGES.contains(&name).then_some(Msg::Changed)
 }
 
-/// `rex events --all --json`, read on a thread into `tx`. Dropping it ends the stream.
+/// `rex do` arguments for the events script; with `band`, the script moves that block to follow
+/// the active window around its session, split as `[band]` says.
+fn events_args(band: Option<&str>) -> Vec<String> {
+    let mut args: Vec<String> = ["--autostart=false", "do", "--all", "-"].map(String::from).into();
+    if let Some(band) = band {
+        let c = config();
+        args.extend([
+            format!("band={band}"),
+            format!("split={}", c.band_split.name()),
+            format!("rows={}", c.band_rows),
+            format!("columns={}", c.band_columns),
+        ]);
+    }
+    args
+}
+
+/// `rex do --all -` running `rex/events.lua`, its lines read on a thread into `tx`. Dropping it
+/// ends the script.
 pub struct Subscriber {
     child: Option<Child>,
 }
 
 impl Subscriber {
-    /// Starts the stream; a spawn failure arrives as `Msg::Lost`.
-    pub fn start(tx: Sender<Msg>) -> Subscriber {
+    /// Starts the script, following with `band` when given; a spawn failure arrives as `Msg::Lost`.
+    pub fn start(tx: Sender<Msg>, band: Option<&str>) -> Subscriber {
         let spawned = Command::new(rex_bin())
-            .args(["--autostart=false", "events", "--all", "--json"])
-            .stdin(Stdio::null())
+            .args(events_args(band))
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn();
         let mut child = match spawned {
             Ok(c) => c,
             Err(e) => {
-                let _ = tx.send(Msg::Lost(format!("rex events: {e}")));
+                let _ = tx.send(Msg::Lost(format!("rex do: {e}")));
                 return Subscriber { child: None };
             }
         };
+        // A failed write ends the script, which the reader reports as lost; dropping the pipe
+        // closes rex's stdin so it runs the script.
+        if let Some(mut pipe) = child.stdin.take() {
+            let _ = pipe.write_all(include_str!("rex/events.lua").as_bytes());
+        }
         let (stdout, stderr) = (child.stdout.take(), child.stderr.take());
         thread::spawn(move || {
             if let Some(out) = stdout {
                 for line in BufReader::new(out).lines() {
                     let Ok(line) = line else { break };
                     let Some(msg) = parse_line(&line) else { continue };
-                    let also_changed = matches!(msg, Msg::ActiveWindow { .. });
-                    if tx.send(msg).is_err() || (also_changed && tx.send(Msg::Changed).is_err()) {
+                    if tx.send(msg).is_err() {
                         return;
                     }
                 }
@@ -499,7 +475,7 @@ impl Subscriber {
                 let _ = e.read_to_end(&mut err);
             }
             let reason = if err.is_empty() { "event stream ended".to_string() } else { first_line(&err) };
-            let _ = tx.send(Msg::Lost(format!("rex events: {reason}")));
+            let _ = tx.send(Msg::Lost(format!("rex do: {reason}")));
         });
         Subscriber { child: Some(child) }
     }
@@ -554,31 +530,17 @@ mod tests {
     }
 
     #[test]
-    fn session_of_finds_the_session_holding_a_block() {
-        let raw: Raw = serde_json::from_value(serde_json::json!({"sessions": [
-            {"session_id": "s1", "windows": [{"window_id": "w1", "blocks": [{"block_id": "a"}]}]},
-            {"session_id": "s2", "windows": [{"window_id": "w2", "blocks": {}}, {"window_id": "w3", "blocks": [{"block_id": "b"}]}]}]}))
-        .unwrap();
-        assert_eq!(raw.session_of("a"), Some("s1"));
-        assert_eq!(raw.session_of("b"), Some("s2"));
-        assert_eq!(raw.session_of("gone"), None);
+    fn parse_line_maps_script_lines_and_skips_the_rest() {
+        assert_eq!(parse_line(r#"{"msg":"changed"}"#), Some(Msg::Changed));
+        assert_eq!(parse_line(r#"{"msg":"active_window","session_id":"session:s","window_id":"window:w"}"#), Some(Msg::Changed));
+        assert_eq!(parse_line(r#"{"msg":"error","text":"follow: no rows"}"#), Some(Msg::Error("follow: no rows".into())));
+        assert_eq!(parse_line(r#"{"msg":"later"}"#), None);
+        assert_eq!(parse_line("listening: 15 handlers, every session; Ctrl-C to stop"), None);
     }
 
     #[test]
-    fn parse_line_keeps_only_events_that_change_the_snapshot() {
-        let session = |event: &str| format!(r#"{{"type":"session_event","payload":{{"session_id":"s1","event":{event}}}}}"#);
-        let block = |name: &str| {
-            session(&format!(r#"{{"type":"block_event","payload":{{"block_id":"b","name":"{name}","payload":{{}}}}}}"#))
-        };
-        assert_eq!(parse_line(&block("program_status_changed")), Some(Msg::Changed));
-        assert_eq!(parse_line(&block("title_changed")), None);
-        assert_eq!(parse_line(&session(r#"{"type":"client_connected","payload":{}}"#)), None);
-        assert_eq!(parse_line(&session(r#"{"type":"block_closed","payload":{"block_id":"b"}}"#)), Some(Msg::Changed));
-        assert_eq!(
-            parse_line(&session(r#"{"type":"active_window_changed","payload":{"window_id":"w2"}}"#)),
-            Some(Msg::ActiveWindow { session_id: "s1".into(), window_id: "w2".into() })
-        );
-        assert_eq!(parse_line(r#"{"type":"session_created","payload":{}}"#), Some(Msg::Changed));
-        assert_eq!(parse_line("not json"), None);
+    fn events_args_pass_band_follow_only_for_a_band() {
+        assert_eq!(events_args(None), ["--autostart=false", "do", "--all", "-"]);
+        assert_eq!(events_args(Some("block:b"))[4..], ["band=block:b", "split=down", "rows=14", "columns=50"]);
     }
 }
