@@ -4,6 +4,14 @@ All notable changes to trail are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The band follows the active window again under Rex server preview.23 and later, which no longer set `REX_SESSION`: trail finds its session from the block in `REX_BLOCK`.
+- `rex-trail record` exits once its Rex server has been unreachable for 60 seconds, instead of polling `rex` forever; the next config load starts it again.
+- Each Rex server gets its own recorder: the lock is now `recorder-<server>.lock`, keyed by the server name history lines are tagged with, so a second server's history is recorded too.
+
 ## [0.1.0] - 2026-11-18
 
 Port of herdr-trail 0.1.1 to Rex, as `rex-trail`. Views, keys, session adapters and `config.toml` keys are unchanged. What differs from herdr-trail:

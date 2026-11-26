@@ -259,14 +259,15 @@ fn focus(app: &App, block_id: &str) -> anyhow::Result<()> {
     rex::call("session.focus_block", json!({ "session_id": lane.workspace_id, "block_id": block_id })).map(drop)
 }
 
-/// Moves the band into `window` when it becomes this session's active window.
+/// Moves the band into `window` when it becomes the active window of the band's own session, the
+/// one holding its block; a band not in the snapshot doesn't follow.
 fn follow(app: &App, host: &Host, session_id: &str, window_id: &str) -> anyhow::Result<()> {
-    let (Some(session), Some(band)) = (env_nonempty("REX_SESSION"), self_pane()) else { return Ok(()) };
-    if app.popup || !config().band_follow || session != session_id {
+    let Some(band) = self_pane() else { return Ok(()) };
+    if app.popup || !config().band_follow || host.raw.session_of(&band) != Some(session_id) {
         return Ok(());
     }
-    match open::follow_anchor(&host.raw, &session, &band, window_id) {
-        Some(anchor) => open::follow(&session, &band, &anchor),
+    match open::follow_anchor(&host.raw, session_id, &band, window_id) {
+        Some(anchor) => open::follow(session_id, &band, &anchor),
         None => Ok(()),
     }
 }

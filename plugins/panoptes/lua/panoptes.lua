@@ -5,11 +5,10 @@
 local M = {}
 local terminal = "com.superlogical.terminal"
 
--- Runs panoptes in $1 and, if it fails, keeps the pane open on its error until Enter.
+-- Runs panoptes in the pane's cwd and, if it fails, keeps the pane open on its error until Enter.
 local pane_script = [[
 hold() { printf '\n%s\npress enter to close…' "$1"; read -r _; exit 1; }
 command -v panoptes >/dev/null 2>&1 || hold "panoptes is not on PATH. Install it: brew install david-morgan-suffolk/tap/panoptes"
-cd "$1" || hold "cannot cd into $1"
 panoptes || hold "panoptes exited with status $? (run it from a GitHub checkout; see the error above)."
 ]]
 
@@ -44,7 +43,8 @@ local function layout(cwd)
   return rex.layout.block{
     flavor = terminal .. ".shell",
     label = "panoptes",
-    options = { command = { "sh", "-c", pane_script, "panoptes", cwd } },
+    -- No `shell = "none"`: the user's shell runs first so panoptes and gh are found on its PATH.
+    options = { command = { "sh", "-c", pane_script }, cwd = cwd },
   }
 end
 
