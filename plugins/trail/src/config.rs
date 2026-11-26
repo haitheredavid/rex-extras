@@ -24,6 +24,16 @@ pub enum Split {
     Right,
 }
 
+impl Split {
+    /// Its `[band] split` value.
+    pub fn name(self) -> &'static str {
+        match self {
+            Split::Down => "down",
+            Split::Right => "right",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     /// `[start] view`: a `--view` name, already checked.
@@ -89,6 +99,11 @@ pub fn parse_dur(s: &str) -> Option<i64> {
             _ => return None,
         },
     )
+}
+
+/// `80%` as `0.8`.
+fn fraction(size: &str) -> f64 {
+    size.trim_end_matches('%').parse::<f64>().map_or(0.8, |n| n / 100.0)
 }
 
 const TABLES: [&str; 7] = ["start", "history", "band", "popup", "filter", "notify", "privacy"];
@@ -180,6 +195,19 @@ impl Config {
         }
         Ok(())
     }
+
+    /// What `rex-trail config --json` prints: the settings the Lua module places panes with.
+    pub fn placement_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "band": {
+                "split": self.band_split.name(),
+                "rows": self.band_rows,
+                "columns": self.band_columns,
+                "follow": self.band_follow,
+            },
+            "popup": { "width": fraction(&self.popup_width), "height": fraction(&self.popup_height) },
+        })
+    }
 }
 
 /// Defaults with `path` applied; a missing file is not a problem.
@@ -259,6 +287,18 @@ mod tests {
         assert_eq!(c.max_text, TextLevel::Intent);
         let names: Vec<&str> = problems.iter().map(|p| p.split(':').next().unwrap()).collect();
         assert_eq!(names, ["band.rows", "bogus", "notify.blocked_after", "popup.height", "start.orient"], "{problems:?}");
+    }
+
+    #[test]
+    fn placement_json_has_band_and_popup_fractions() {
+        let c = Config { popup_height: "45%".into(), ..Config::default() };
+        assert_eq!(
+            c.placement_json(),
+            serde_json::json!({
+                "band": {"split": "down", "rows": 14, "columns": 50, "follow": true},
+                "popup": {"width": 0.8, "height": 0.45},
+            })
+        );
     }
 
     #[test]

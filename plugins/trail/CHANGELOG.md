@@ -6,6 +6,21 @@ All notable changes to trail are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- `trail_toggle` closes the session's band, or opens it.
+- `trail_focus` focuses the session's band or popup, or opens the band.
+- `trail_next_blocked` focuses the next agent reporting `blocked` in any session, wrapping around, and switches the app to its session.
+- `rex-trail config --json` prints the resolved `[band]` and `[popup]` settings.
+
+### Changed
+
+- The Lua module places the band and popup itself (`rex.session.new_split`/`move_block`, `new_layer`), sized from `rex-trail config --json`; `trail_open` and `trail_popup` focus an open band or popup instead of opening a second. Action titles are now `Trail: Open Band` and `Trail: Open Popup`.
+- Events come from an embedded `rex do` script with `rex.on` handlers instead of `rex events --all --json`, and that script moves the band when it follows the active window.
+- The `rex-trail open` subcommand is removed; use the `trail_open` and `trail_popup` actions.
+- The default `bin` comes from `$REX_EXTRAS_HOME`, else `$HOME`; without either, `setup` no longer fails at load, and the actions report the missing path instead.
+- Failed actions raise `trail: <error>` to whoever ran them.
+
 ### Fixed
 
 - The band follows the active window again under Rex server preview.23 and later, which no longer set `REX_SESSION`: trail finds its session from the block in `REX_BLOCK`.
