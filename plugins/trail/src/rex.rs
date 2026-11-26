@@ -202,6 +202,16 @@ pub struct Raw {
     pub focused_session_id: Option<String>,
 }
 
+impl Raw {
+    /// The session holding `block`, e.g. the one a pane's `REX_BLOCK` runs in.
+    pub fn session_of(&self, block: &str) -> Option<&str> {
+        self.sessions
+            .iter()
+            .find(|s| s.windows.iter().any(|w| w.blocks.iter().any(|b| b.block_id == block)))
+            .map(|s| s.session_id.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RawSession {
     pub session_id: String,
@@ -541,6 +551,17 @@ mod tests {
         let p = &snap.panes[0];
         assert_eq!((p.agent.as_deref(), p.agent_status, p.title.as_deref()), (Some("claude"), AgentStatus::Working, None));
         assert_eq!(PaneMeta::from(p).session, Some(r));
+    }
+
+    #[test]
+    fn session_of_finds_the_session_holding_a_block() {
+        let raw: Raw = serde_json::from_value(serde_json::json!({"sessions": [
+            {"session_id": "s1", "windows": [{"window_id": "w1", "blocks": [{"block_id": "a"}]}]},
+            {"session_id": "s2", "windows": [{"window_id": "w2", "blocks": {}}, {"window_id": "w3", "blocks": [{"block_id": "b"}]}]}]}))
+        .unwrap();
+        assert_eq!(raw.session_of("a"), Some("s1"));
+        assert_eq!(raw.session_of("b"), Some("s2"));
+        assert_eq!(raw.session_of("gone"), None);
     }
 
     #[test]

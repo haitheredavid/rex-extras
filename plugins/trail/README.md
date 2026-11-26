@@ -41,7 +41,7 @@ The band follows you: when another window of its session becomes active, the ban
 
 ### The recorder
 
-`setup` also starts `rex-trail record` in the background, so the lanes keep their history while no trail is open. It follows Rex's event stream and appends agent lifecycle changes to the history log. Only one recorder runs per state directory (`recorder.lock`); later starts, such as each `rex config reload`, exit at once. Without it, history covers only the time a trail is open.
+`setup` also starts `rex-trail record` in the background, so the lanes keep their history while no trail is open. It follows Rex's event stream and appends agent lifecycle changes to the history log. Only one recorder runs per Rex server and state directory (`recorder-<server>.lock`); later starts, such as each `rex config reload`, exit at once. It exits by itself after its server has been unreachable for a minute. Without it, history covers only the time a trail is open.
 
 In the views and keys below, a *workspace* is a Rex session, a *tab* is a window and a *pane* is a block.
 
@@ -380,7 +380,7 @@ closed = "gray"
 ## Data and privacy
 
 - **Read:** Rex's snapshot (sessions, windows, terminal blocks, their processes and program status) and event stream; the open-file list of agent processes; `~/.claude/sessions/*.json`; and only the session files found for agent blocks, plus those sessions' subagent files. Nothing else on disk.
-- **Stored:** the recorder appends each agent lifecycle change (block, session and window ids and labels, cwd, agent, state, session file path or id) to `events-YYYY-MM.jsonl` in the state directory, one file per UTC month. The state directory is `$REX_TRAIL_STATE_DIR`, else `$XDG_STATE_HOME/rex-extras/trail`, else `~/.local/state/rex-extras/trail`. Lines are tagged with the Rex server (`$REX_SERVER`, or the server's own address for a recorder Rex started), so each server's trail shows its own history. On a new month, files older than `history.retain_months` are deleted. The same directory holds `prefs.toml` (view settings) and `recorder.lock`. Nothing read from transcripts is ever written.
+- **Stored:** the recorder appends each agent lifecycle change (block, session and window ids and labels, cwd, agent, state, session file path or id) to `events-YYYY-MM.jsonl` in the state directory, one file per UTC month. The state directory is `$REX_TRAIL_STATE_DIR`, else `$XDG_STATE_HOME/rex-extras/trail`, else `~/.local/state/rex-extras/trail`. Lines are tagged with the Rex server (`$REX_SERVER`, or the server's own address for a recorder Rex started), so each server's trail shows its own history; each server gets its own recorder, kept to one by `recorder-<server>.lock`, which exits after its server has been unreachable for a minute and starts again on the next config load. On a new month, files older than `history.retain_months` are deleted. The same directory holds `prefs.toml` (view settings) and the recorder locks. Nothing read from transcripts is ever written.
 - **Shown:** prompt and intent text appears only in the timeline, only after `T`, and never past `privacy.max_text`.
 
 ## Troubleshooting
@@ -408,7 +408,7 @@ cd plugins/trail
 cargo test
 cargo build --release
 ./target/release/rex-trail --dump --width 120 --height 20 [--view sequence|area|heat|dash] [--orient v] [--keys "j Tab"]
-./target/release/rex-trail open split --session "$REX_SESSION" --block "$REX_BLOCK"
+./target/release/rex-trail open split --session "$(rex do -e 'return rex.session_id')" --block "$REX_BLOCK"
 ```
 
 `--dump` renders one frame against the running Rex server to stdout, after pressing `--keys`; run it with `REX_BLOCK` unset to include the block you run it from. To try the actions without touching init.lua, write a script that sets `package.path` to `plugins/trail/lua/?.lua` and calls `require("trail").setup{ bin = "<repo>/plugins/trail/target/release/rex-trail", record = false }`, then run `rex config check <script>` and `rex do <script> --action trail_open`.

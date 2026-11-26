@@ -1,6 +1,7 @@
 //! `rex-trail record`: the always-on recorder. Follows the Rex event stream, snapshots on change,
 //! and appends one JSON line per agent lifecycle change to the monthly history log, so the trail
-//! keeps its lanes and sessions across restarts. One recorder per state dir (`recorder.lock`).
+//! keeps its lanes and sessions across restarts. One recorder per Rex server and state dir
+//! (`recorder-<server>.lock`); it exits once its server has been gone for `GIVE_UP_AFTER`.
 
 use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions, TryLockError};
@@ -24,11 +25,26 @@ pub const RETRY_EVERY: Duration = Duration::from_secs(2);
 /// Restart backoff after the event stream ends: doubles per consecutive loss up to the cap.
 pub const RESUBSCRIBE_FIRST: Duration = Duration::from_secs(1);
 pub const RESUBSCRIBE_MAX: Duration = Duration::from_secs(30);
+/// The recorder exits after its server has been unreachable this long; loading the config starts
+/// it again.
+pub const GIVE_UP_AFTER: Duration = Duration::from_secs(60);
 
 pub fn run() -> anyhow::Result<()> {
     let dir = log_dir();
     std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
-    let lock_path = dir.join("recorder.lock");
+    // History is tagged with the server name, and the lock keyed by it; without `REX_SERVER` the
+    // name comes from the server, and history logged under a guess would never show in a trail.
+    let started = Instant::now();
+    let session = loop {
+        if let Some(name) = server_name() {
+            break name;
+        }
+        if started.elapsed() >= GIVE_UP_AFTER {
+            return Ok(());
+        }
+        std::thread::sleep(RETRY_EVERY);
+    };
+    let lock_path = dir.join(lock_name(&session));
     let lock = File::options()
         .create(true)
         .truncate(false)
@@ -41,9 +57,6 @@ pub fn run() -> anyhow::Result<()> {
         Err(TryLockError::Error(e)) => return Err(e).with_context(|| format!("lock {}", lock_path.display())),
     }
 
-    // Named once known: without `REX_SERVER` the name comes from the server, and history logged
-    // under a guess would never show in a pane's trail.
-    let mut session: Option<String> = None;
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut host = Host::default();
     let mut agents: Option<BTreeMap<String, PaneMeta>> = None;
@@ -51,6 +64,7 @@ pub fn run() -> anyhow::Result<()> {
     let mut resubscribe_at: Option<Instant> = None;
     let mut backoff = RESUBSCRIBE_FIRST;
     let mut snapshot_at = Instant::now();
+    let mut unreachable_since: Option<Instant> = None;
 
     loop {
         let now = Instant::now();
@@ -78,17 +92,11 @@ pub fn run() -> anyhow::Result<()> {
         }
         match host.snapshot() {
             Ok(snap) => {
-                if session.is_none() {
-                    session = server_name();
-                }
-                let Some(session) = session.as_deref() else {
-                    snapshot_at = Instant::now() + RETRY_EVERY;
-                    continue;
-                };
+                unreachable_since = None;
                 let current = agent_metas(&snap);
                 let ts_ms = chrono::Utc::now().timestamp_millis();
                 let events: Vec<LogEvent> =
-                    diff(agents.as_ref(), &current).into_iter().map(|(event, m)| log_event(event, m, session, ts_ms)).collect();
+                    diff(agents.as_ref(), &current).into_iter().map(|(event, m)| log_event(event, m, &session, ts_ms)).collect();
                 // A failed write keeps the old state, so the next snapshot logs the same changes.
                 match append(&dir, ts_ms, &events) {
                     Ok(()) => agents = Some(current),
@@ -96,10 +104,20 @@ pub fn run() -> anyhow::Result<()> {
                 }
                 snapshot_at = Instant::now() + SNAPSHOT_EVERY;
             }
-            // Rex unreachable: nothing to record until it's back.
-            Err(_) => snapshot_at = Instant::now() + RETRY_EVERY,
+            // Rex unreachable: nothing to record until it's back, and nothing at all once it's gone.
+            Err(_) => {
+                if unreachable_since.get_or_insert(now).elapsed() >= GIVE_UP_AFTER {
+                    return Ok(());
+                }
+                snapshot_at = Instant::now() + RETRY_EVERY;
+            }
         }
     }
+}
+
+/// The lock file of the recorder for `server`, a `server_name()` (already filename-safe).
+fn lock_name(server: &str) -> String {
+    format!("recorder-{server}.lock")
 }
 
 /// Blocks running an agent, by block id, with their session and window labels.
@@ -323,5 +341,11 @@ mod tests {
         prune_months(&dir, now, 0);
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 4, "0 keeps every month");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn lock_is_per_server() {
+        assert_eq!(lock_name("127.0.0.1_7300"), "recorder-127.0.0.1_7300.lock");
+        assert_ne!(lock_name("a"), lock_name("b"));
     }
 }
